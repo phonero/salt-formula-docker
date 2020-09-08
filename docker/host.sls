@@ -4,7 +4,7 @@
 
 docker_packages:
   pkg.installed:
-  - pkgs: {{ host.pkgs }}
+  - pkgs: {{ host.pkgs | json }}
 
 {%- if grains.get('virtual_subtype', None) not in ['Docker', 'LXC'] %}
 
@@ -79,7 +79,7 @@ docker_service:
 
 {%- if host.registry is defined %}
 
-{%- for name,registry in host.registry.iteritems() %}
+{%- for name,registry in host.registry.items() %}
 
 docker_{{ registry.get('address', name) }}_login:
   cmd.run:

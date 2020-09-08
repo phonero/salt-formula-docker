@@ -4,7 +4,7 @@
 include:
   - docker.host
 
-{%- for name, network in swarm.get('network', {}).iteritems() %}
+{%- for name, network in swarm.get('network', {}).items() %}
 {%- if network.get('enabled', True) %}
 
 docker_swarm_network_{{ name }}_create:
@@ -19,7 +19,7 @@ docker_swarm_network_{{ name }}_create:
         {%- if network.iprange is defined %} --ip-range {{ network.iprange }} {%- endif %}
         {%- if network.ipamdriver is defined %} --ipam-driver {{ network.ipamdriver }} {%- endif %}
         {%- if network.subnet is defined %} --subnet {{ network.subnet }} {%- endif %}
-        {%- for param,value in network.get('opt', {}).iteritems() %} --opt {{ param }}={{ value }} {%- endfor %}
+        {%- for param,value in network.get('opt', {}).items() %} --opt {{ param }}={{ value }} {%- endfor %}
         {{ name }}
     - unless: "docker network ls | grep {{ name }}"
     - require_in:
@@ -55,10 +55,18 @@ docker_swarm_grains_publish:
 {%- else %}
 
 {%- set join_token = [] %}
+{%- set target = swarm.get("master", {}).get("target") %}
 # Globals can't be overrided from for cycle
-{%- for node_name, node_grains in salt['mine.get']('*', swarm.mine_function).iteritems() %}
-{%- if node_grains.get("docker_swarm_AdvertiseAddr", None) == swarm.master.host|string+":"+swarm.master.port|string %}
-{%- do join_token.append(node_grains.get('docker_swarm_tokens').get(swarm.role, "unknown")) %}
+{%- for node_name, node_grains in salt["mine.get"](
+  "*" if target is none else target,
+  swarm.mine_function
+).items() %}
+{%- set candidate_token = node_grains.get("docker_swarm_tokens", {}).get(swarm.role) %}
+{%- if
+  (target is not none and candidate_token)
+  or (node_grains.get("docker_swarm_AdvertiseAddr", None) == swarm.master.host|string+":"+swarm.master.port|string)
+%}
+{%- do join_token.append(candidate_token or "unknown") %}
 {%- break %}
 {%- endif %}
 {%- endfor %}
@@ -75,7 +83,7 @@ docker_swarm_join:
         {{ swarm.master.host }}:{{ swarm.master.port }}
     - unless:
       - "test -e /var/lib/docker/swarm/state.json"
-      - "grep -q node_id /var/lib/docker/swarm/state.json"
+      - "grep -Eq '\"(node_id|addr)\"' /var/lib/docker/swarm/state.json"
     - require:
       - service: docker_service
 
